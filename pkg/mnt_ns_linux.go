@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -36,7 +37,7 @@ func SwitchMountNs(pid int) {
 	pidns := getMountNs(pid)
 
 	if myns != pidns {
-		setns(pidns)
+		setns(pid)
 	}
 }
 
@@ -63,10 +64,19 @@ func getMountNs(pid int) int {
 }
 
 func setns(fd int) error {
-	ret, _, err := unix.Syscall(unix.SYS_SETNS, uintptr(uint(fd)), uintptr(CLONE_NEWNS), 0)
-	if ret != 0 {
-		return fmt.Errorf("syscall SYS_SETNS failed: %v", err)
+	if err := unix.Unshare(unix.CLONE_FS); err != nil {
+		return fmt.Errorf("unshare mount namespace error: %s", err)
 	}
 
+	nsMountFileName := fmt.Sprintf("/proc/%d/ns/mnt", fd)
+	nsMountFile, err := os.Open(nsMountFileName)
+	if err != nil {
+		return fmt.Errorf("open mount namespace file error: %s", err)
+	}
+
+	defer nsMountFile.Close()
+	if err = unix.Setns(int(nsMountFile.Fd()), syscall.CLONE_NEWNS); err != nil {
+		return err
+	}
 	return nil
 }
