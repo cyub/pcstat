@@ -22,13 +22,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"golang.org/x/sys/unix"
 )
-
-// not available before Go 1.4
-const CLONE_NEWNS = 0x00020000 /* mount namespace */
 
 // if the pid is in a different mount namespace (e.g. Docker)
 // the paths will be all wrong, so try to enter that namespace
@@ -75,7 +71,7 @@ func setns(fd int) error {
 	}
 
 	defer nsMountFile.Close()
-	if err = unix.Setns(int(nsMountFile.Fd()), syscall.CLONE_NEWNS); err != nil {
+	if err = unix.Setns(int(nsMountFile.Fd()), unix.CLONE_NEWNS); err != nil {
 		return err
 	}
 	return nil
