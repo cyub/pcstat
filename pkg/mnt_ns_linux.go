@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -60,19 +61,26 @@ func getMountNs(pid int) int {
 }
 
 func setns(fd int) error {
+	// Lock the system thread to prevent the goroutine from
+	// switching to another system thread after call setnx
+	runtime.LockOSThread()
+
+	// Go runtime call clone to create a thread, and the flags parameter passed contains CLONE_FS.
+	// Only by calling unshare to remove CLONE_FS then can setns set CLONE_NEWNS ok.
+	// See man 2 setnx get more information.
 	if err := unix.Unshare(unix.CLONE_FS); err != nil {
-		return fmt.Errorf("unshare mount namespace error: %s", err)
+		return fmt.Errorf("unshare mount namespace error: %w", err)
 	}
 
 	nsMountFileName := fmt.Sprintf("/proc/%d/ns/mnt", fd)
 	nsMountFile, err := os.Open(nsMountFileName)
 	if err != nil {
-		return fmt.Errorf("open mount namespace file error: %s", err)
+		return fmt.Errorf("open mount namespace file error: %w", err)
 	}
-
 	defer nsMountFile.Close()
+
 	if err = unix.Setns(int(nsMountFile.Fd()), unix.CLONE_NEWNS); err != nil {
-		return err
+		return fmt.Errorf("setns mount namespace error: %w", err)
 	}
 	return nil
 }
